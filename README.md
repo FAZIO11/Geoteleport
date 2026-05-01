@@ -1,247 +1,196 @@
 # Location Spoofer
 
-A free, open-source Mac app that lets anyone change their iPhone's GPS
-location with a click. No jailbreak, no Apple Developer account, no
-sketchy profiles — just plug your iPhone in over USB, pick a spot on a
-map, and tap **Move iPhone Here**. Built for non-technical users:
-launch the app, get a map, get on with your life.
+**Free, open-source Mac app to fake your iPhone's GPS location — no jailbreak, no Apple account needed.**
+
+Pick any spot on a map, click **Move iPhone Here**, and your iPhone thinks it's there.
+
+<br>
+
+<p align="center">
+  <a href="https://github.com/FAZIO11/LocationSpoofer/releases/latest/download/LocationSpoofer.dmg">
+    <img src="https://img.shields.io/badge/⬇_Download_for_Mac-LocationSpoofer.dmg-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download LocationSpoofer">
+  </a>
+</p>
+
+<br>
 
 ---
 
 ## What you need
 
-- A Mac running **macOS 12 (Monterey)** or newer
-- An **iPhone** (iOS 12 through iOS 16 work out of the box; iOS 17+ needs
-  one extra setup step — see [iOS 17+ note](#ios-17-note) below)
-- A working **USB / USB-C cable** that can transfer data (not a
-  charge-only cable)
-- The first time you connect the iPhone, you'll be asked to **Trust** the
-  computer — tap "Trust" and enter your passcode
-
-That's it. No account. No subscription. No internet required after the
-first launch (only the map tiles and the place search use the internet).
+- A **Mac** running macOS 12 (Monterey) or newer
+- An **iPhone** with a data-transfer USB cable (not a charge-only cable)
+- **iOS 17 or newer?** One extra step is needed — the app will walk you through it
 
 ---
 
-## Quick start (use the prebuilt app)
+## Getting started
 
-1. Download `LocationSpoofer.app` (or build it yourself — see below).
-2. Plug your iPhone into your Mac. Tap **Trust** on the phone if asked.
-3. Double-click `LocationSpoofer.app`.
-4. Your browser opens with a map. Click anywhere — or search a place —
-   and hit **Move iPhone Here**.
-5. To stop spoofing and get your real GPS back, hit **Stop spoofing**.
+### 1. Download and open the app
 
-> **First-launch warning:** Because this app isn't signed by a paid Apple
-> Developer account, macOS will block it the first time. See
-> [Bypassing the "unverified developer" warning](#unverified-developer)
-> below.
+Click the download button above to get `LocationSpoofer.dmg`.
 
----
+Open the DMG, then drag **LocationSpoofer** into your Applications folder.
 
-## Run it in dev mode (no .app needed)
+> **macOS security warning (one-time)**
+>
+> Because this app isn't on the App Store, macOS will block it the first time:
+>
+> *"LocationSpoofer.app cannot be opened because the developer cannot be verified."*
+>
+> **Fix:** Right-click (or Control-click) the app → **Open** → click **Open** in the dialog.
+>
+> macOS only asks once. After that, just double-click as normal.
 
-If you have Python and want to hack on it:
+### 2. Connect your iPhone
 
-```bash
-# 1. Install dependencies
-cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+Plug your iPhone into your Mac with a USB cable.
 
-# 2. Run the server
-python main.py
-# → opens http://localhost:8765 in your browser
-```
+If your iPhone shows a **"Trust This Computer?"** popup — tap **Trust** and enter your passcode.
 
-You can also test the spoofer directly from the command line, no UI:
+### 3. Open Location Spoofer
 
-```bash
-# from inside backend/ with the venv active
-python spoofer.py status                 # check if iPhone is connected
-python spoofer.py 48.8584 2.2945         # set location to the Eiffel Tower
-python spoofer.py reset                  # restore real GPS
-```
+Double-click **LocationSpoofer** in your Applications folder.
 
----
+Your browser opens automatically with a map. The app will guide you through any remaining setup (like enabling Developer Mode on iOS 17+).
 
-## Build the .app yourself
+### 4. Pick a location and go
 
-```bash
-./build/build.sh
-```
+- **Click anywhere on the map** to drop a pin, then hit **Move iPhone Here**
+- **Or type a place name** in the search bar and select from the suggestions
 
-The script:
+Your iPhone's GPS will switch to that location within a few seconds — in every app.
 
-1. Installs `pymobiledevice3`, FastAPI, uvicorn and PyInstaller.
-2. Bundles `backend/main.py`, `backend/spoofer.py` and
-   `frontend/index.html` into a single `.app`.
-3. Outputs `dist/LocationSpoofer.app`.
+### 5. Stop spoofing
 
-To use a specific Python interpreter:
+Hit **Stop Spoofing** in the app to get your real GPS back.
 
-```bash
-PYTHON=/opt/homebrew/bin/python3.12 ./build/build.sh
-```
+Or just unplug the iPhone — the fake location disappears on its own.
 
 ---
 
-<a id="unverified-developer"></a>
-## Bypassing the "unverified developer" warning
-
-The first time you (or anyone else) opens `LocationSpoofer.app`, macOS
-will refuse with a message like:
-
-> "LocationSpoofer.app" cannot be opened because the developer cannot
-> be verified.
-
-This is **not** a bug — it just means the app isn't signed by a $99/year
-Apple Developer account. To get past it (one-time, per Mac):
-
-**Option A — Right-click open**
-
-1. In Finder, **right-click** (or Control-click) `LocationSpoofer.app`.
-2. Choose **Open**.
-3. In the dialog that appears, click **Open** again.
-
-**Option B — System Settings**
-
-1. Try to open the app normally and dismiss the warning.
-2. Open **System Settings → Privacy & Security**.
-3. Scroll down — you'll see a message about LocationSpoofer being
-   blocked. Click **Open Anyway**.
-
-After that, double-clicking always works. macOS only asks once per app
-per Mac.
-
----
-
-<a id="ios-17-note"></a>
 ## iOS 17+ setup (one extra step)
 
-Apple changed how developer tools talk to the iPhone in iOS 17. Setting
-the location now requires an authenticated network "tunnel" to the
-phone, which has to be started by a process running as root. There is
-no workaround that doesn't require sudo — Apple made it this way.
+Apple tightened how GPS simulation works in iOS 17. You need to do two things once:
 
-You need **two** things on iOS 17+:
+### Enable Developer Mode on your iPhone
 
-### 1. Enable Developer Mode on the iPhone (one time, ever)
+1. On your iPhone: **Settings → Privacy & Security → Developer Mode → toggle ON**
+2. The phone reboots. After reboot, tap **Turn On** and enter your passcode.
 
-1. **Settings → Privacy & Security → Developer Mode → toggle ON**
-2. The phone reboots.
-3. After reboot, unlock the phone. A popup asks "Turn On Developer
-   Mode?" — tap **Turn On** and enter your passcode.
+> If you don't see Developer Mode in Settings, plug the iPhone into your Mac, open Location Spoofer once, then reboot the phone — it will appear.
 
-If you don't see the **Developer Mode** row, plug the iPhone into the
-Mac, run Location Spoofer once, then reboot the phone — the row will
-appear after that.
+### Start the tunnel (after each Mac restart)
 
-### 2. Start the tunnel daemon (each Mac reboot)
+Open **Terminal** and run:
 
-In a Terminal window, from the project root:
-
-```bash
-./backend/start-tunnel.sh
+```
+/Applications/LocationSpoofer.app/Contents/MacOS/start-tunnel.sh
 ```
 
-It'll ask for your Mac password (sudo is required to create a virtual
-network interface for the iPhone). Then it'll sit there showing log
-output. **Leave that window open.**
+It'll ask for your Mac password, then sit in the background. **Leave that window open** while you use the app.
 
-> Why not just `sudo python3 -m pymobiledevice3 remote tunneld`?
-> Because `sudo` uses your system Python, not the venv Python where
-> `pymobiledevice3` is actually installed. The helper script points
-> sudo at the right interpreter for you.
-
-Now launch `LocationSpoofer.app` (or `python main.py` in dev mode).
-The iPhone status pill at the top of the UI should flip from yellow
-("needs tunnel") to green ("ready") within a few seconds.
-
-When you're done, press **Ctrl-C** in the tunnel terminal to shut it down.
-
-#### Troubleshooting the tunnel
-
-- **Status stays yellow.** Wait ~10 seconds — the daemon takes a moment
-  to find the device. Still yellow? Unplug and replug the iPhone.
-- **`start-tunnel.sh` says "Couldn't find .venv/bin/python".** You
-  haven't created the venv yet. Go to *Run it in dev mode* above.
-- **`sudo` won't accept your password.** Make sure your user is an
-  Administrator on the Mac (System Settings → Users & Groups).
-- **The daemon prints `Developer Mode disabled`.** Go back to step 1
-  and re-enable Developer Mode on the iPhone.
+The status indicator in Location Spoofer will turn green when it's ready.
 
 ---
 
 ## Troubleshooting
 
-| What you see | What to do |
+| What you see | What to try |
 |---|---|
-| "No iPhone detected." | Replug the cable. Try a different cable (charge-only cables won't work). Try a different USB port. |
-| "iPhone is locked." | Wake the phone, unlock with passcode/Face ID, tap **Trust** on the popup. |
-| "Pairing was denied." | Unplug, replug, and tap **Trust** this time when the popup appears. |
-| Yellow "needs tunnel" status | You're on iOS 17+. Run the `tunneld` command above. |
-| Spoof works but Maps still shows real location | Force-quit Maps and reopen it. Some apps cache the last known location for a few seconds. |
-| Want to undo the spoof | Hit **Stop spoofing** in the app. Or just unplug the iPhone and reboot it. |
-| `pip install` fails building `pydantic-core` from source | You're on a Python version older than 3.10 or newer than what the pinned `pydantic` ships wheels for. Easiest fix: `brew install python@3.12` and re-run inside that Python. |
+| "No iPhone detected." | Replug the cable. Try a different cable — charge-only cables won't work. |
+| "iPhone is locked." | Wake the phone, unlock it, then tap **Trust** on the popup. |
+| "Pairing was denied." | Unplug, replug, and tap **Trust** when the popup appears. |
+| Yellow "needs tunnel" status | You're on iOS 17+. Start the tunnel (see above). |
+| Maps still shows real location | Force-quit Maps and reopen it — some apps cache location for a few seconds. |
+| Nothing happens after clicking | Make sure the status indicator is green before spoofing. |
 
 ---
 
-## How it works (short version)
+## Privacy
 
-- `pymobiledevice3` opens a USB connection to your iPhone via macOS's
-  built-in `usbmuxd` daemon.
-- It uses the same private-but-stable developer service that Xcode uses
-  to simulate location during app development (`LocationSimulation`).
-- The fake location persists until you call `clear` or unplug the
-  phone — exactly the same behaviour as Xcode.
+No data leaves your computer. No account, no analytics, no tracking.
 
-No data leaves your computer. No analytics. No phone-home. The only
-network calls the app makes are:
-
-- OpenStreetMap tiles (the map background)
-- Nominatim (place name → coordinates, used by the search bar)
-
-Both are free public services and require no account.
+The only network calls the app makes are to load map tiles (OpenStreetMap) and look up place names when you search (Nominatim). Both are free public services.
 
 ---
 
-## Limitations (v1)
+<details>
+<summary><strong>Building from source</strong></summary>
 
-- **macOS only.** No Windows or Linux support.
-- **USB only.** No Wi-Fi spoofing.
-- **No GPX route playback.** Coordinates are static. (Coming in v2.)
-- **iOS 17+ needs the tunneld helper** (see above).
-- **Not on the App Store.** Apple won't allow apps like this.
+<br>
+
+**Requirements:** macOS 12+, Python 3.10–3.14
+
+```bash
+git clone https://github.com/FAZIO11/LocationSpoofer.git
+cd LocationSpoofer
+./build/build.sh
+```
+
+This installs all dependencies, bundles everything with PyInstaller, and produces:
+- `dist/LocationSpoofer.app`
+- `dist/LocationSpoofer.dmg`
+
+To use a specific Python version:
+
+```bash
+PYTHON=/opt/homebrew/bin/python3.12 ./build/build.sh
+```
+
+</details>
+
+<details>
+<summary><strong>Running in dev mode</strong></summary>
+
+<br>
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+# → opens http://localhost:8765
+```
+
+Test the spoofer from the command line directly:
+
+```bash
+python spoofer.py status           # check if iPhone is connected
+python spoofer.py 48.8584 2.2945   # set location (Eiffel Tower)
+python spoofer.py reset            # restore real GPS
+```
+
+</details>
+
+<details>
+<summary><strong>How it works</strong></summary>
+
+<br>
+
+- `pymobiledevice3` opens a USB (or Wi-Fi) connection to your iPhone via macOS's built-in `usbmuxd` daemon.
+- It uses the same private developer service Xcode uses to simulate location during app development (`LocationSimulation` via DVT).
+- The fake GPS persists until you hit Stop Spoofing or unplug — identical behaviour to Xcode's location simulator.
+- On iOS 17+, Apple requires an authenticated network tunnel (`pymobiledevice3 remote tunneld`) before the service can be reached.
+- Wi-Fi spoofing works automatically when the tunnel is running and your iPhone is on the same network — no cable needed.
+
+</details>
+
+<details>
+<summary><strong>Limitations</strong></summary>
+
+<br>
+
+- **macOS only** — no Windows or Linux support
+- **No route playback** — location is a fixed point, not a moving path (coming in v2)
+- **iOS 17+ requires the tunnel helper** — see setup above
+- **Not on the App Store** — Apple doesn't allow apps like this
+
+</details>
 
 ---
 
 ## License
 
-MIT License. Use it, fork it, ship it. No warranty.
-
-```
-MIT License
-
-Copyright (c) 2026 Location Spoofer contributors
-
-Permission is hereby granted, free of charge, to any person obtaining a
-copy of this software and associated documentation files (the
-"Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish,
-distribute, sublicense, and/or sell copies of the Software, and to
-permit persons to whom the Software is furnished to do so, subject to
-the following conditions:
-
-The above copyright notice and this permission notice shall be included
-in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
-TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
-SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-```
+MIT — use it, fork it, ship it. [Full text](LICENSE)
