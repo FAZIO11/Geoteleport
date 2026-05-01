@@ -291,6 +291,23 @@
       font-size: 13px; color: var(--muted); line-height: 1.45;
     }
 
+    /* ── Connection-type badge ───────────────────────────────────── */
+    .conn-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 999px;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+    .conn-badge.usb  { background: #eff6ff; color: var(--accent); }
+    .conn-badge.wifi { background: #f0fdf4; color: var(--good); }
+
     /* ── Active-spoof banner ─────────────────────────────────────── */
     .active-banner {
       display: none;
@@ -585,19 +602,20 @@
     setupBody.innerHTML = "";
     setupCard.classList.remove("needs-action", "all-good");
 
-    const step = data.step || "no_device";
-    const ios  = data.ios_version ? parseInt(data.ios_version) : 0;
-    const ready = step === "ready";
+    const step     = data.step || "no_device";
+    const ios      = data.ios_version ? parseInt(data.ios_version) : 0;
+    const ready    = step === "ready";
+    const connType = data.connection_type || null;  // "usb" | "wifi" | null
 
     // ── Step 1: Connect ──────────────────────────────────────────────
     const s1 = step === "no_device" ? "pending" : "done";
-    setupBody.appendChild(makeStep(
-      s1,
-      "Connect iPhone via USB",
-      s1 === "pending"
-        ? "Use a data cable (charge-only cables won't work). Your Mac may ask to allow accessory — click Allow."
-        : null
-    ));
+    const s1Label = connType === "wifi"
+      ? "iPhone connected via Wi-Fi ✓"
+      : "Connect iPhone via USB (or Wi-Fi)";
+    const s1Hint = s1 === "pending"
+      ? "Use a USB data cable, <em>or</em> make sure your iPhone is on the same Wi-Fi network with the tunnel (start-tunnel.sh) already running."
+      : null;
+    setupBody.appendChild(makeStep(s1, s1Label, s1Hint));
 
     // ── Step 2: Trust ────────────────────────────────────────────────
     const s2 = ["no_device"].includes(step) ? "waiting"
@@ -635,10 +653,9 @@
       ));
     }
 
-    // ── Card styling ─────────────────────────────────────────────────
+    // ── Card styling + connection badge ──────────────────────────────
     if (ready) {
       setupCard.classList.add("all-good");
-      // Auto-collapse when ready (once), so map controls get focus
       if (!setupCollapsed) {
         setupCollapsed = true;
         setupCard.classList.add("collapsed");
@@ -647,6 +664,17 @@
       setupCard.classList.add("needs-action");
       setupCollapsed = false;
       setupCard.classList.remove("collapsed");
+    }
+
+    // Show a "USB" or "Wi-Fi" badge next to the header title when ready
+    const headerSpan = setupToggle.querySelector("span:first-child");
+    const oldBadge = setupToggle.querySelector(".conn-badge");
+    if (oldBadge) oldBadge.remove();
+    if (ready && connType) {
+      const badge = document.createElement("span");
+      badge.className = `conn-badge ${connType}`;
+      badge.textContent = connType === "wifi" ? "Wi-Fi" : "USB";
+      headerSpan.after(badge);
     }
 
     // Wire up copy buttons

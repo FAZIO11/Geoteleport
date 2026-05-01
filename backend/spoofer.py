@@ -160,6 +160,36 @@ def _device_label(lockdown) -> str:
     return info.get("DeviceName") or "your iPhone"
 
 
+def _get_label_from_rsd(rsd) -> str:
+    """Best-effort device name from a RemoteServiceDiscoveryService object."""
+    try:
+        name = rsd.lockdown.get_value("", "DeviceName")
+        if name:
+            return name
+    except Exception:
+        pass
+    return getattr(rsd, "product_type", None) or "iPhone"
+
+
+def _connection_type_from_tunneld() -> Optional[str]:
+    """
+    Inspect the tunneld HTTP response to determine whether the active tunnel
+    is USB or Wi-Fi.  Interface names from the usbmux monitor start with
+    'usbmux-'; anything else (bare IPv6/IPv4 from the Wi-Fi monitor) is Wi-Fi.
+    Returns 'usb', 'wifi', or None if tunneld is unreachable.
+    """
+    try:
+        import requests as _req
+        tunnels: dict = _req.get("http://127.0.0.1:49151", timeout=1).json()
+    except Exception:
+        return None
+    for details in tunnels.values():
+        for entry in details:
+            if not entry.get("interface", "").startswith("usbmux-"):
+                return "wifi"
+    return "usb"
+
+
 # --------------------------------------------------------------------------- #
 # Persistent DVT session — keeps the location alive until explicitly stopped
 # --------------------------------------------------------------------------- #
@@ -428,8 +458,16 @@ def spoof_location(latitude: float, longitude: float) -> Result:
     try:
         lockdown = _connect_lockdown()
     except RuntimeError as exc:
-        log.warning("connect failed: %s", exc)
-        return Result(False, str(exc))
+        log.warning("USB connect failed (%s) — trying Wi-Fi tunnel...", exc)
+        rsd = _get_ios17_rsd()
+        if rsd is None:
+            return Result(
+                False,
+                "No iPhone found via USB or Wi-Fi. Connect your iPhone or check the tunnel is running.",
+            )
+        label = _get_label_from_rsd(rsd)
+        log.info("device via Wi-Fi: %s, iOS %s", label, rsd.product_version)
+        return _spoof_ios17(latitude, longitude, label)
 
     label = _device_label(lockdown)
     ios_version = getattr(lockdown, "product_version", None)
@@ -446,7 +484,17 @@ def clear_location() -> Result:
     try:
         lockdown = _connect_lockdown()
     except RuntimeError as exc:
-        return Result(False, str(exc))
+        log.warning("USB connect failed (%s) — trying Wi-Fi tunnel for clear...", exc)
+        rsd = _get_ios17_rsd()
+        if rsd is None:
+            # No USB, no Wi-Fi — if a DVT session is active locally we can still stop it
+            with _SESSION_LOCK:
+                had = _SESSION_STOP is not None
+                _stop_active_session()
+            if had:
+                return Result(True, "Location reset. Real GPS is back.")
+            return Result(False, "No iPhone found via USB or Wi-Fi.")
+        return _clear_ios17(_get_label_from_rsd(rsd))
 
     label = _device_label(lockdown)
     major = _major_ios_version(getattr(lockdown, "product_version", None))
@@ -514,7 +562,26 @@ def get_status() -> Dict[str, Any]:
     except TimeoutError:
         return _base("no_device", "Couldn't reach iPhone in time — try replugging the cable.")
     except pmd_exc.NoDeviceConnectedError:
-        return _base("no_device", "No iPhone detected. Plug in your iPhone with a USB data cable.")
+        # USB not found — check whether a Wi-Fi tunnel is active instead
+        if _tunneld_is_running():
+            rsd = _get_ios17_rsd()
+            if rsd is not None:
+                name = _get_label_from_rsd(rsd)
+                return {
+                    "connected": True,
+                    "step": "ready",
+                    "device_name": name,
+                    "ios_version": rsd.product_version,
+                    "model": getattr(rsd, "product_type", None),
+                    "developer_mode": True,   # tunnel can't exist without dev mode
+                    "tunnel_running": True,
+                    "connection_type": "wifi",
+                    "message": f"{name} connected via Wi-Fi — ready to spoof.",
+                }
+        return _base(
+            "no_device",
+            "No iPhone detected. Connect via USB, or make sure your iPhone is on the same Wi-Fi network with the tunnel running.",
+        )
     except pmd_exc.PasswordRequiredError:
         return _base("locked", "Your iPhone is locked. Unlock it, then tap Trust when prompted.")
     except pmd_exc.UserDeniedPairingError:
@@ -556,6 +623,7 @@ def get_status() -> Dict[str, Any]:
             )
 
     # ── 4. All good ───────────────────────────────────────────────────────
+    conn_type = _connection_type_from_tunneld() if tunnel_running else "usb"
     return {
         "connected": True,
         "step": "ready",
@@ -564,6 +632,7 @@ def get_status() -> Dict[str, Any]:
         "model": model,
         "developer_mode": dev_mode,
         "tunnel_running": tunnel_running,
+        "connection_type": conn_type or "usb",
         "message": f"{name} (iOS {ios_version}) ready to spoof.",
     }
 
