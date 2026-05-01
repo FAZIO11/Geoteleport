@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+backend/.venv/
+*.egg-info/
+
+# PyInstaller output
+dist/
+build/dist/
+*.app
+*.dmg
+*.spec
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.cursor/
+.vscode/
+*.swp
+
+# Secrets / local config
+.env

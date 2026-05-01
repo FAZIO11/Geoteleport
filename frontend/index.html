@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Location Spoofer</title>
+
+  <!-- Leaflet from CDN. No build step, no npm. -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --ink: #1a1f2c;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #2563eb;
+      --accent-press: #1d4ed8;
+      --good: #16a34a;
+      --bad: #dc2626;
+      --warn: #d97706;
+      --shadow: 0 6px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 15px;
+    }
+
+    /* Layout: header on top, sidebar + map below. */
+    .app {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 20px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      gap: 16px;
+    }
+
+    .title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 17px;
+      letter-spacing: -0.01em;
+    }
+
+    .title .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: #f1f5f9;
+      font-size: 13px;
+      color: var(--muted);
+      max-width: 60%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .status .indicator {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .status.connected { color: var(--good); background: #ecfdf5; }
+    .status.connected .indicator { background: var(--good); box-shadow: 0 0 0 3px rgba(22,163,74,0.2); }
+
+    .status.warn { color: var(--warn); background: #fffbeb; }
+    .status.warn .indicator { background: var(--warn); }
+
+    .status.disconnected { color: var(--bad); background: #fef2f2; }
+    .status.disconnected .indicator { background: var(--bad); }
+
+    main {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      min-height: 0;
+    }
+
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      .sidebar { border-right: 0; border-bottom: 1px solid var(--line); }
+    }
+
+    .sidebar {
+      padding: 20px;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+    }
+
+    .group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 14px;
+      font-size: 15px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      transition: border-color 0.15s, box-shadow 0.15s;
+      min-width: 0;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.05s;
+    }
+
+    button:active { transform: translateY(1px); }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      box-shadow: var(--shadow);
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-press); }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: var(--ink);
+      width: 100%;
+    }
+    .btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+
+    .btn-search {
+      background: var(--ink);
+      color: white;
+      padding: 12px 16px;
+    }
+    .btn-search:hover:not(:disabled) { background: #0b1220; }
+
+    .coord-card {
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 14px;
+      color: var(--ink);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 4px 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .coord-card .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .coord-card .v { font-weight: 600; }
+
+    .help {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translate(-50%, 20px);
+      background: var(--ink);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 500;
+      box-shadow: var(--shadow);
+      max-width: min(560px, 90vw);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+      z-index: 1000;
+      text-align: center;
+      line-height: 1.4;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.good { background: var(--good); }
+    .toast.bad { background: var(--bad); }
+
+    #map {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* Search result dropdown */
+    .search-results {
+      list-style: none;
+      margin: 6px 0 0 0;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      max-height: 220px;
+      overflow-y: auto;
+      background: white;
+      display: none;
+    }
+    .search-results.open { display: block; }
+    .search-results li {
+      padding: 10px 12px;
+      cursor: pointer;
+      font-size: 13px;
+      border-bottom: 1px solid var(--line);
+    }
+    .search-results li:last-child { border-bottom: 0; }
+    .search-results li:hover { background: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="title">
+        <span class="dot"></span>
+        Location Spoofer
+      </div>
+      <div id="status" class="status">
+        <span class="indicator"></span>
+        <span class="text">Checking iPhone…</span>
+      </div>
+    </header>
+
+    <main>
+      <aside class="sidebar">
+        <div class="group">
+          <label for="search">Search a place</label>
+          <div class="search-row">
+            <input id="search" type="text" placeholder="e.g. Eiffel Tower, Paris" autocomplete="off" />
+            <button id="search-btn" class="btn-search" type="button">Go</button>
+          </div>
+          <ul id="search-results" class="search-results"></ul>
+        </div>
+
+        <div class="group">
+          <label>Picked location</label>
+          <div class="coord-card">
+            <div class="k">Lat</div><div class="v" id="lat-value">—</div>
+            <div class="k">Lng</div><div class="v" id="lng-value">—</div>
+          </div>
+        </div>
+
+        <div class="group">
+          <button id="spoof-btn" class="btn-primary" type="button" disabled>
+            Move iPhone Here
+          </button>
+        </div>
+
+        <div class="group">
+          <button id="reset-btn" class="btn-secondary" type="button">
+            Stop spoofing (back to real GPS)
+          </button>
+        </div>
+
+        <div class="help">
+          Click the map or drag the pin to pick a spot, then tap
+          <strong>Move iPhone Here</strong>. You can also search for
+          a place by name.
+        </div>
+      </aside>
+
+      <div id="map"></div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <!-- Leaflet JS from CDN. Self-contained, no build step. -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // -- Config -----------------------------------------------------------
+    // Same-origin when served by the FastAPI app, falls back to localhost
+    // when the HTML is opened directly via file://.
+    const API_BASE =
+      (location.protocol === "http:" || location.protocol === "https:")
+        ? ""
+        : "http://localhost:8765";
+
+    const DEFAULT_CENTER = [40.7484, -73.9857]; // Empire State, NYC
+    const DEFAULT_ZOOM = 13;
+
+    // -- DOM refs ---------------------------------------------------------
+    const $ = (id) => document.getElementById(id);
+    const statusEl = $("status");
+    const statusText = statusEl.querySelector(".text");
+    const latVal = $("lat-value");
+    const lngVal = $("lng-value");
+    const spoofBtn = $("spoof-btn");
+    const resetBtn = $("reset-btn");
+    const searchInput = $("search");
+    const searchBtn = $("search-btn");
+    const resultsEl = $("search-results");
+    const toastEl = $("toast");
+
+    // -- Map setup --------------------------------------------------------
+    const map = L.map("map", { zoomControl: true, attributionControl: true })
+      .setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    const marker = L.marker(DEFAULT_CENTER, { draggable: true }).addTo(map);
+    let picked = { lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1] };
+    setPicked(picked.lat, picked.lng);
+
+    map.on("click", (e) => setPicked(e.latlng.lat, e.latlng.lng, true));
+    marker.on("dragend", () => {
+      const p = marker.getLatLng();
+      setPicked(p.lat, p.lng, false);
+    });
+
+    function setPicked(lat, lng, moveMarker = true) {
+      picked = { lat, lng };
+      latVal.textContent = lat.toFixed(5);
+      lngVal.textContent = lng.toFixed(5);
+      if (moveMarker) marker.setLatLng([lat, lng]);
+      spoofBtn.disabled = false;
+    }
+
+    // -- Toast helper -----------------------------------------------------
+    let toastTimer = null;
+    function toast(msg, kind /* 'good' | 'bad' | undefined */) {
+      toastEl.textContent = msg;
+      toastEl.className = "toast show" + (kind ? " " + kind : "");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toastEl.classList.remove("show");
+      }, 4500);
+    }
+
+    // -- Status polling ---------------------------------------------------
+    async function pollStatus() {
+      try {
+        const r = await fetch(API_BASE + "/status", { cache: "no-store" });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const data = await r.json();
+        renderStatus(data);
+      } catch (e) {
+        renderStatus({
+          connected: false,
+          message: "Can't reach the local server. Is the app still running?",
+        });
+      }
+    }
+
+    function renderStatus(data) {
+      statusEl.classList.remove("connected", "disconnected", "warn");
+      if (!data.connected) {
+        statusEl.classList.add("disconnected");
+      } else if (data.needs_tunnel) {
+        statusEl.classList.add("warn");
+      } else {
+        statusEl.classList.add("connected");
+      }
+      statusText.textContent = data.message || (data.connected ? "iPhone connected" : "iPhone not connected");
+    }
+
+    pollStatus();
+    setInterval(pollStatus, 3000);
+
+    // -- Spoof + reset ----------------------------------------------------
+    async function postJSON(path, body, timeoutMs = 35000) {
+      // Hard timeout so the UI never sits on a "Sending…" spinner forever
+      // if pymobiledevice3 hangs on something downstream.
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const r = await fetch(API_BASE + path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body ? JSON.stringify(body) : undefined,
+          signal: ctrl.signal,
+        });
+        let data;
+        try { data = await r.json(); }
+        catch { data = { ok: false, message: "Server returned an unexpected response." }; }
+        return { httpOk: r.ok, ...data };
+      } catch (e) {
+        if (e && e.name === "AbortError") {
+          return {
+            httpOk: false,
+            ok: false,
+            message:
+              "The iPhone didn't respond in time. Check the tunnel terminal " +
+              "(start-tunnel.sh) and that Developer Mode is on, then try again.",
+          };
+        }
+        throw e;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    spoofBtn.addEventListener("click", async () => {
+      spoofBtn.disabled = true;
+      const oldText = spoofBtn.textContent;
+      spoofBtn.textContent = "Sending to iPhone…";
+      try {
+        const result = await postJSON("/spoof", { lat: picked.lat, lng: picked.lng });
+        toast(result.message || (result.ok ? "Done." : "Something went wrong."), result.ok ? "good" : "bad");
+      } catch (e) {
+        toast("Couldn't reach the local server.", "bad");
+      } finally {
+        spoofBtn.textContent = oldText;
+        spoofBtn.disabled = false;
+        pollStatus();
+      }
+    });
+
+    resetBtn.addEventListener("click", async () => {
+      resetBtn.disabled = true;
+      const oldText = resetBtn.textContent;
+      resetBtn.textContent = "Resetting…";
+      try {
+        const result = await postJSON("/reset");
+        toast(result.message || (result.ok ? "Reset." : "Couldn't reset."), result.ok ? "good" : "bad");
+      } catch (e) {
+        toast("Couldn't reach the local server.", "bad");
+      } finally {
+        resetBtn.textContent = oldText;
+        resetBtn.disabled = false;
+        pollStatus();
+      }
+    });
+
+    // -- Geocoding (Nominatim, free, no API key) --------------------------
+    let searchAbort = null;
+    async function runSearch() {
+      const q = searchInput.value.trim();
+      if (!q) {
+        resultsEl.classList.remove("open");
+        resultsEl.innerHTML = "";
+        return;
+      }
+      if (searchAbort) searchAbort.abort();
+      searchAbort = new AbortController();
+
+      searchBtn.disabled = true;
+      const url =
+        "https://nominatim.openstreetmap.org/search?format=json&limit=6&q=" +
+        encodeURIComponent(q);
+      try {
+        const r = await fetch(url, {
+          signal: searchAbort.signal,
+          headers: { "Accept": "application/json" },
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const items = await r.json();
+        renderResults(items);
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          toast("Couldn't search. Check your internet connection.", "bad");
+        }
+      } finally {
+        searchBtn.disabled = false;
+      }
+    }
+
+    function renderResults(items) {
+      resultsEl.innerHTML = "";
+      if (!items || items.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "No results found.";
+        li.style.color = "var(--muted)";
+        li.style.cursor = "default";
+        resultsEl.appendChild(li);
+        resultsEl.classList.add("open");
+        return;
+      }
+      for (const it of items) {
+        const li = document.createElement("li");
+        li.textContent = it.display_name;
+        li.addEventListener("click", () => {
+          const lat = parseFloat(it.lat);
+          const lng = parseFloat(it.lon);
+          if (!isFinite(lat) || !isFinite(lng)) return;
+          map.setView([lat, lng], 15);
+          setPicked(lat, lng);
+          resultsEl.classList.remove("open");
+        });
+        resultsEl.appendChild(li);
+      }
+      resultsEl.classList.add("open");
+    }
+
+    searchBtn.addEventListener("click", runSearch);
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); runSearch(); }
+    });
+    document.addEventListener("click", (e) => {
+      if (!resultsEl.contains(e.target) && e.target !== searchInput && e.target !== searchBtn) {
+        resultsEl.classList.remove("open");
+      }
+    });
+
+    // Make sure the map sizes correctly after layout settles.
+    setTimeout(() => map.invalidateSize(), 100);
+    window.addEventListener("resize", () => map.invalidateSize());
+  })();
+  </script>
+</body>
+</html>
