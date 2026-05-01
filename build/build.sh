@@ -27,7 +27,7 @@ SPEC_DIR="$SCRIPT_DIR"
 
 PYTHON_BIN="${PYTHON:-python3}"
 
-echo "==> Using Python: $($PYTHON_BIN --version)"
+echo "==> Using Python: $("$PYTHON_BIN" --version)"
 echo "==> Repo root:    $REPO_ROOT"
 
 # ---- Sanity checks ----------------------------------------------------------
@@ -54,7 +54,7 @@ rm -rf "$DIST_DIR" "$WORK_DIR" "$SPEC_DIR/LocationSpoofer.spec"
 echo "==> Installing dependencies..."
 "$PYTHON_BIN" -m pip install --upgrade pip wheel >/dev/null
 "$PYTHON_BIN" -m pip install -r "$BACKEND_DIR/requirements.txt"
-"$PYTHON_BIN" -m pip install pyinstaller==6.11.1
+"$PYTHON_BIN" -m pip install "pyinstaller>=6.15.0"
 
 # ---- Optional icon ----------------------------------------------------------
 ICON_FLAG=()
@@ -102,9 +102,33 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# ---- Create DMG -------------------------------------------------------------
+DMG_PATH="$DIST_DIR/LocationSpoofer.dmg"
+echo "==> Creating DMG..."
+
+# Staging folder for the DMG contents
+DMG_STAGE="$WORK_DIR/dmg-staging"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+
+# Copy the .app and add a symlink to /Applications for drag-install UX
+cp -R "$APP_PATH" "$DMG_STAGE/"
+ln -s /Applications "$DMG_STAGE/Applications"
+
+hdiutil create \
+  -volname "LocationSpoofer" \
+  -srcfolder "$DMG_STAGE" \
+  -ov \
+  -format UDZO \
+  -fs HFS+ \
+  "$DMG_PATH"
+
+rm -rf "$DMG_STAGE"
+
 echo
 echo "✓ Build complete."
 echo "   App: $APP_PATH"
+echo "   DMG: $DMG_PATH"
 echo
 echo "------------------------------------------------------------------"
 echo "  CODE SIGNING NOTE"
