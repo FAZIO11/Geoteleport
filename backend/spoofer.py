@@ -456,20 +456,55 @@ def clear_location() -> Result:
     return _clear_classic(lockdown, label)
 
 
+def _tunneld_is_running() -> bool:
+    """Quick HTTP ping to the tunneld daemon — no iPhone needed."""
+    try:
+        import requests as _req
+        _req.get("http://127.0.0.1:49151", timeout=1)
+        return True
+    except Exception:
+        return False
+
+
+def _check_developer_mode(lockdown) -> Optional[bool]:
+    """Return True/False/None (None = can't determine, e.g. older iOS)."""
+    try:
+        val = lockdown.get_value("com.apple.security.mac.amfi", "DeveloperModeStatus")
+        return bool(val)
+    except Exception:
+        return None
+
+
 def get_status() -> Dict[str, Any]:
     """
-    Lightweight check used by the UI's status indicator.
+    Detailed device status for the setup checklist UI.
 
-    Returns:
-        {
-            "connected": bool,
-            "device_name": str | None,
-            "ios_version": str | None,
-            "model": str | None,
-            "needs_tunnel": bool,
-            "message": str,
-        }
+    step values (ordered):
+      "no_device"         — no iPhone detected over USB
+      "locked"            — iPhone detected but locked / unpaired
+      "untrusted"         — pairing denied on the iPhone
+      "no_developer_mode" — Developer Mode is off (iOS 16+)
+      "no_tunnel"         — tunnel daemon not running (iOS 17+)
+      "ready"             — everything set, ready to spoof
+
+    Full response keys:
+      connected, step, device_name, ios_version, model,
+      developer_mode (bool|null), tunnel_running (bool), message
     """
+    def _base(step: str, msg: str, **extra) -> Dict[str, Any]:
+        return {
+            "connected": step not in ("no_device", "locked", "untrusted"),
+            "step": step,
+            "device_name": None,
+            "ios_version": None,
+            "model": None,
+            "developer_mode": None,
+            "tunnel_running": False,
+            "message": msg,
+            **extra,
+        }
+
+    # ── 1. Attempt a USB lockdown connection ──────────────────────────────
     try:
         lockdown = _run_with_timeout(
             lambda: create_using_usbmux(autopair=False),
@@ -477,63 +512,59 @@ def get_status() -> Dict[str, Any]:
             label="status-connect",
         )
     except TimeoutError:
-        return {
-            "connected": False,
-            "device_name": None,
-            "ios_version": None,
-            "model": None,
-            "needs_tunnel": False,
-            "message": "Couldn't reach the iPhone in time. Replug the cable.",
-        }
+        return _base("no_device", "Couldn't reach iPhone in time — try replugging the cable.")
     except pmd_exc.NoDeviceConnectedError:
-        return {
-            "connected": False,
-            "device_name": None,
-            "ios_version": None,
-            "model": None,
-            "needs_tunnel": False,
-            "message": "No iPhone connected.",
-        }
+        return _base("no_device", "No iPhone detected. Plug in your iPhone with a USB data cable.")
     except pmd_exc.PasswordRequiredError:
-        return {
-            "connected": False,
-            "device_name": None,
-            "ios_version": None,
-            "model": None,
-            "needs_tunnel": False,
-            "message": "iPhone is locked. Unlock it and tap Trust.",
-        }
+        return _base("locked", "Your iPhone is locked. Unlock it, then tap Trust when prompted.")
+    except pmd_exc.UserDeniedPairingError:
+        return _base("untrusted", "Pairing was denied. Unplug, replug, and tap Trust on your iPhone.")
     except Exception as exc:
-        return {
-            "connected": False,
-            "device_name": None,
-            "ios_version": None,
-            "model": None,
-            "needs_tunnel": False,
-            "message": f"Can't reach iPhone. ({_short_error(exc)})",
-        }
+        return _base("no_device", f"Can't reach iPhone over USB. Try a different cable. ({_short_error(exc)})")
 
     info = getattr(lockdown, "short_info", None) or {}
     ios_version = getattr(lockdown, "product_version", None)
     major = _major_ios_version(ios_version)
-    needs_tunnel = major >= 17 and _get_ios17_rsd() is None
-
     name = info.get("DeviceName") or "iPhone"
-    if needs_tunnel:
-        msg = (
-            f"{name} (iOS {ios_version}) connected — iOS 17+ needs the tunnel. "
-            "Run ./backend/start-tunnel.sh in a terminal and leave it open."
-        )
-    else:
-        msg = f"{name} (iOS {ios_version}) ready."
+    model = info.get("ProductType")
 
+    # ── 2. Developer Mode check (iOS 16+) ────────────────────────────────
+    dev_mode = _check_developer_mode(lockdown)
+    if dev_mode is False:
+        return _base(
+            "no_developer_mode",
+            f"{name} connected — Developer Mode is off. Go to Settings → Privacy & Security → Developer Mode and turn it ON.",
+            device_name=name,
+            ios_version=ios_version,
+            model=model,
+            developer_mode=False,
+        )
+
+    # ── 3. Tunnel check (iOS 17+) ─────────────────────────────────────────
+    tunnel_running = False
+    if major >= 17:
+        tunnel_running = _tunneld_is_running()
+        if not tunnel_running:
+            return _base(
+                "no_tunnel",
+                f"{name} (iOS {ios_version}) connected — run ./backend/start-tunnel.sh in Terminal and leave it open.",
+                device_name=name,
+                ios_version=ios_version,
+                model=model,
+                developer_mode=dev_mode,
+                tunnel_running=False,
+            )
+
+    # ── 4. All good ───────────────────────────────────────────────────────
     return {
         "connected": True,
+        "step": "ready",
         "device_name": name,
         "ios_version": ios_version,
-        "model": info.get("ProductType"),
-        "needs_tunnel": needs_tunnel,
-        "message": msg,
+        "model": model,
+        "developer_mode": dev_mode,
+        "tunnel_running": tunnel_running,
+        "message": f"{name} (iOS {ios_version}) ready to spoof.",
     }
 
 
