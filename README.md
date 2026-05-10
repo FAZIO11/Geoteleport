@@ -7,7 +7,7 @@ Pick any spot on a map, click **Move iPhone Here**, and your iPhone thinks it's 
 <br>
 
 <p align="center">
-  <a href="https://github.com/FAZIO11/LocationSpoofer/releases/latest/download/LocationSpoofer.dmg">
+  <a href="https://github.com/FAZIO11/Geoteleport/releases/latest/download/LocationSpoofer.dmg">
     <img src="https://img.shields.io/badge/⬇_Download_for_Mac-LocationSpoofer.dmg-blue?style=for-the-badge&logo=apple&logoColor=white" alt="Download LocationSpoofer">
   </a>
 </p>
@@ -34,9 +34,9 @@ Open the DMG, then drag **LocationSpoofer** into your Applications folder.
 
 > **macOS security warning (one-time)**
 >
-> Because this app isn't on the App Store, macOS will block it the first time:
+> Because this app isn't notarized by Apple, macOS will block it the first time:
 >
-> *"LocationSpoofer.app cannot be opened because the developer cannot be verified."*
+> *"LocationSpoofer.app cannot be opened because Apple cannot check it for malicious software."*
 >
 > **Fix:** Right-click (or Control-click) the app → **Open** → click **Open** in the dialog.
 >
@@ -52,7 +52,9 @@ If your iPhone shows a **"Trust This Computer?"** popup — tap **Trust** and en
 
 Double-click **LocationSpoofer** in your Applications folder.
 
-Your browser opens automatically with a map. The app will guide you through any remaining setup (like enabling Developer Mode on iOS 17+).
+A window opens with a map. The app will guide you through any remaining setup (like enabling Developer Mode on iOS 17+).
+
+On iOS 17+, macOS will ask for your Mac password the first time you open the app — that's how Location Spoofer gets permission to talk to your iPhone. Type your password and the setup card turns green.
 
 ### 4. Pick a location and go
 
@@ -71,26 +73,14 @@ Or just unplug the iPhone — the fake location disappears on its own.
 
 ## iOS 17+ setup (one extra step)
 
-Apple tightened how GPS simulation works in iOS 17. You need to do two things once:
-
-### Enable Developer Mode on your iPhone
+Apple tightened how GPS simulation works in iOS 17. You need to enable **Developer Mode** on your iPhone once:
 
 1. On your iPhone: **Settings → Privacy & Security → Developer Mode → toggle ON**
 2. The phone reboots. After reboot, tap **Turn On** and enter your passcode.
 
 > If you don't see Developer Mode in Settings, plug the iPhone into your Mac, open Location Spoofer once, then reboot the phone — it will appear.
 
-### Start the tunnel (after each Mac restart)
-
-Open **Terminal** and run:
-
-```
-/Applications/LocationSpoofer.app/Contents/MacOS/start-tunnel.sh
-```
-
-It'll ask for your Mac password, then sit in the background. **Leave that window open** while you use the app.
-
-The status indicator in Location Spoofer will turn green when it's ready.
+That's it. Location Spoofer handles the rest — when it needs admin permission to talk to your iPhone (the developer tunnel), it asks with the standard macOS password dialog. No Terminal commands required.
 
 ---
 
@@ -101,7 +91,7 @@ The status indicator in Location Spoofer will turn green when it's ready.
 | "No iPhone detected." | Replug the cable. Try a different cable — charge-only cables won't work. |
 | "iPhone is locked." | Wake the phone, unlock it, then tap **Trust** on the popup. |
 | "Pairing was denied." | Unplug, replug, and tap **Trust** when the popup appears. |
-| Yellow "needs tunnel" status | You're on iOS 17+. Start the tunnel (see above). |
+| Yellow "needs tunnel" / "Allow access" prompt | iOS 17+ device — click **Allow access** and type your Mac password when macOS asks. |
 | Maps still shows real location | Force-quit Maps and reopen it — some apps cache location for a few seconds. |
 | Nothing happens after clicking | Make sure the status indicator is green before spoofing. |
 
@@ -123,7 +113,7 @@ The only network calls the app makes are to load map tiles (OpenStreetMap) and l
 **Requirements:** macOS 12+, Python 3.10–3.14
 
 ```bash
-git clone https://github.com/FAZIO11/LocationSpoofer.git
+git clone https://github.com/FAZIO11/Geoteleport.git
 cd LocationSpoofer
 ./build/build.sh
 ```
@@ -151,7 +141,9 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
-# → opens http://localhost:8765
+# → opens the native window
+# → set LOCATION_SPOOFER_HEADLESS=1 to skip the window (server only on :8765)
+# → set LOCATION_SPOOFER_BROWSER=1 to open in your browser instead
 ```
 
 Test the spoofer from the command line directly:
@@ -172,7 +164,7 @@ python spoofer.py reset            # restore real GPS
 - `pymobiledevice3` opens a USB (or Wi-Fi) connection to your iPhone via macOS's built-in `usbmuxd` daemon.
 - It uses the same private developer service Xcode uses to simulate location during app development (`LocationSimulation` via DVT).
 - The fake GPS persists until you hit Stop Spoofing or unplug — identical behaviour to Xcode's location simulator.
-- On iOS 17+, Apple requires an authenticated network tunnel (`pymobiledevice3 remote tunneld`) before the service can be reached.
+- On iOS 17+, Apple requires an authenticated network tunnel (`pymobiledevice3 remote tunneld`) before the service can be reached. The app launches this helper automatically with `osascript -e 'do shell script ... with administrator privileges'` — that's why macOS asks for your password the first time.
 - Wi-Fi spoofing works automatically when the tunnel is running and your iPhone is on the same network — no cable needed.
 
 </details>
@@ -184,7 +176,7 @@ python spoofer.py reset            # restore real GPS
 
 - **macOS only** — no Windows or Linux support
 - **No route playback** — location is a fixed point, not a moving path (coming in v2)
-- **iOS 17+ requires the tunnel helper** — see setup above
+- **iOS 17+ requires Developer Mode** — see setup above
 - **Not on the App Store** — Apple doesn't allow apps like this
 
 </details>

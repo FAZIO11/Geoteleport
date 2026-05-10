@@ -265,7 +265,7 @@ def _wait_for_dvt_set(set_event: threading.Event, error_holder: List[Optional[Ba
         return Result(
             False,
             f"Timed out setting location on {label}. "
-            "Check that the tunnel (start-tunnel.sh) is running and Developer Mode is on, then try again.",
+            "Make sure Developer Mode is on and the tunnel is running, then try again.",
         )
 
     if error_holder[0] is not None:
@@ -286,10 +286,8 @@ def _wait_for_dvt_set(set_event: threading.Event, error_holder: List[Optional[Ba
 
 def _ios17_unsupported_message() -> str:
     return (
-        "Your iPhone is on iOS 17 or newer. iOS 17+ needs an extra setup step "
-        "(developer tunnel). Open Terminal and run:\n"
-        "    ./backend/start-tunnel.sh\n"
-        "Leave that running, then come back and try again. See the README for details."
+        "Your iPhone is on iOS 17 or newer, which needs the developer tunnel. "
+        "Click \"Allow access\" in the setup card to grant permission, then try again."
     )
 
 
@@ -614,7 +612,7 @@ def get_status() -> Dict[str, Any]:
         if not tunnel_running:
             return _base(
                 "no_tunnel",
-                f"{name} (iOS {ios_version}) connected — run ./backend/start-tunnel.sh in Terminal and leave it open.",
+                f"{name} (iOS {ios_version}) connected — click \"Allow access\" to grant tunnel permission.",
                 device_name=name,
                 ios_version=ios_version,
                 model=model,

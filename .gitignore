@@ -9,6 +9,7 @@ backend/.venv/
 # PyInstaller output
 dist/
 build/dist/
+build/build/
 *.app
 *.dmg
 *.spec

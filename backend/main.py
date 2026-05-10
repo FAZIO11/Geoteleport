@@ -1,15 +1,18 @@
 """
-main.py — FastAPI server that wraps spoofer.py and serves the map UI.
+main.py — FastAPI server + native window for Location Spoofer.
 
 Endpoints:
     GET  /          → serves frontend/index.html
     GET  /status    → iPhone connection info
     POST /spoof     → set fake location  { "lat": float, "lng": float }
     POST /reset     → clear fake location (back to real GPS)
+    POST /start-tunnel → opens Terminal to launch the dev tunnel (legacy)
     GET  /healthz   → simple liveness probe
 
-Runs on http://localhost:8765 by default. When launched directly (or as the
-PyInstaller .app), it also opens the user's browser to the map UI.
+Runs on http://localhost:8765 and shows a native macOS WKWebView window via
+pywebview. Set LOCATION_SPOOFER_HEADLESS=1 to skip the window (server-only,
+useful for tests). Set LOCATION_SPOOFER_BROWSER=1 to open the system browser
+instead of the native window.
 """
 
 from __future__ import annotations
@@ -35,6 +38,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from spoofer import clear_location, get_status, spoof_location  # noqa: E402
 
 
+__version__ = "1.1.0"
+
 HOST = "127.0.0.1"
 PORT = 8765
 
@@ -57,7 +62,7 @@ def _frontend_path() -> Path:
 # App + middleware
 # --------------------------------------------------------------------------- #
 
-app = FastAPI(title="Location Spoofer", version="1.0.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="Location Spoofer", version=__version__, docs_url=None, redoc_url=None)
 
 # Permissive CORS — this server only ever binds to localhost, and we want the
 # bundled HTML file to be able to call it whether opened via http:// or file://.
@@ -130,6 +135,16 @@ def spoof(req: SpoofRequest) -> Dict[str, Any]:
         }
 
 
+@app.post("/start-tunnel")
+def start_tunnel() -> Dict[str, Any]:
+    """Launch the tunneld helper with admin auth (native macOS prompt)."""
+    if sys.platform != "darwin":
+        return {"ok": False, "message": "This only works on macOS."}
+    import tunnel_manager
+    ok, message = tunnel_manager.start()
+    return {"ok": ok, "message": message}
+
+
 @app.post("/reset")
 def reset() -> Dict[str, Any]:
     try:
@@ -164,23 +179,116 @@ async def _human_validation_error(_: Request, exc: RequestValidationError):
 # --------------------------------------------------------------------------- #
 
 
-def _open_browser_when_ready(url: str) -> None:
-    # Tiny delay so uvicorn has bound the port before we hit it.
-    time.sleep(1.0)
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+def _run_tunneld() -> None:
+    """Run as the privileged tunneld helper (invoked with --tunneld).
+
+    The same .app binary serves two roles: the unprivileged GUI (default) and
+    the elevated tunneld daemon (this branch). Bundling one binary keeps the
+    PyInstaller build simpler and guarantees the helper has the same dep set.
+    """
+    from pymobiledevice3.tunneld import TUNNELD_DEFAULT_ADDRESS, TunneldRunner
+
+    host, port = TUNNELD_DEFAULT_ADDRESS
+    TunneldRunner.create(host, port)
+
+
+def _auto_prompt_tunnel_when_needed() -> None:
+    """Background thread: if an iOS 17+ device is plugged in and the tunnel
+    isn't running, trigger the native admin auth dialog automatically.
+
+    Only fires once per app launch. If the user cancels, they can retry via
+    the "Allow access" button in the setup card.
+    """
+    import tunnel_manager
+    from spoofer import get_status
+
+    # Give the user a beat to see the window before we pop the password prompt.
+    time.sleep(1.5)
+
+    # Wait up to ~10s for the device to be detected. If still no device after
+    # that, do nothing — the user will see the "connect iPhone" step and we'll
+    # let them click "Allow access" manually once they plug in.
+    for _ in range(20):
+        try:
+            status = get_status()
+        except Exception:
+            status = {}
+        step = status.get("step")
+        if step == "no_tunnel":
+            if not tunnel_manager.is_running():
+                tunnel_manager.start()
+            return
+        if step in ("ready", None):  # already running or undetectable
+            return
+        time.sleep(0.5)
+
+
+def _wait_for_server(url: str, timeout: float = 8.0) -> None:
+    """Poll /healthz until uvicorn binds, so the window doesn't show a blank page."""
+    import urllib.request
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(f"{url}healthz", timeout=0.5).read()
+            return
+        except Exception:
+            time.sleep(0.1)
+
+
+def _serve(host: str, port: int) -> None:
+    import uvicorn
+
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 def main() -> None:
-    import uvicorn
+    if "--tunneld" in sys.argv:
+        _run_tunneld()
+        return
 
     url = f"http://{HOST}:{PORT}/"
-    if os.environ.get("LOCATION_SPOOFER_NO_BROWSER") != "1":
-        threading.Thread(target=_open_browser_when_ready, args=(url,), daemon=True).start()
 
-    uvicorn.run(app, host=HOST, port=PORT, log_level="warning")
+    if os.environ.get("LOCATION_SPOOFER_HEADLESS") == "1":
+        _serve(HOST, PORT)
+        return
+
+    if os.environ.get("LOCATION_SPOOFER_BROWSER") == "1":
+        threading.Thread(
+            target=lambda: (time.sleep(1.0), webbrowser.open(url)),
+            daemon=True,
+        ).start()
+        _serve(HOST, PORT)
+        return
+
+    # Native window path: uvicorn on a thread, pywebview on the main thread
+    # (pywebview must own the main thread on macOS for the AppKit run loop).
+    threading.Thread(target=_serve, args=(HOST, PORT), daemon=True).start()
+    _wait_for_server(url)
+
+    # Kick off the auto-prompt before showing the window so it can fire as
+    # soon as a device is detected.
+    threading.Thread(target=_auto_prompt_tunnel_when_needed, daemon=True).start()
+
+    import webview  # imported lazily so headless mode doesn't pull in pyobjc
+
+    webview.create_window(
+        f"Location Spoofer {__version__}",
+        url=url,
+        width=1180,
+        height=780,
+        min_size=(900, 620),
+    )
+    try:
+        webview.start()
+    finally:
+        # Window closed → ask the privileged tunneld helper to exit. Localhost
+        # HTTP, no admin re-prompt.
+        try:
+            import tunnel_manager
+            tunnel_manager.stop()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -20,3 +20,6 @@ pydantic==2.13.3
 # Pinned to keep the resolver predictable across machines.
 starlette==0.49.3
 anyio==4.13.0
+
+# Native macOS window (WKWebView) so the app doesn't open in a browser tab.
+pywebview==6.2.1

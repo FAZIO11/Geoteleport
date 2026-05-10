@@ -213,6 +213,23 @@
     .copy-btn:hover { background: #f1f5f9; }
     .copy-btn.copied { color: var(--good); border-color: #86efac; background: #f0fdf4; }
 
+    .action-btn {
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      cursor: pointer;
+      margin-top: 6px;
+      margin-right: 6px;
+      transition: background .12s;
+    }
+    .action-btn:hover:not(:disabled) { background: var(--accent-press); border-color: var(--accent-press); }
+    .action-btn:disabled { opacity: .6; cursor: default; }
+
     /* ── Coord card & controls ───────────────────────────────────── */
     .group label {
       display: block;
@@ -584,15 +601,19 @@
     return                          { cls: "waiting", icon: "·" };
   }
 
-  function makeStep(state, label, hint, copyText) {
+  function makeStep(state, label, hint, copyText, action) {
     const ic = stepIcon(state);
     const row = document.createElement("div");
     row.className = "step-row";
+    const actionHtml = action
+      ? `<button class="action-btn" data-action="${action.id}">${action.label}</button>`
+      : "";
     row.innerHTML = `
       <div class="step-icon ${ic.cls}">${ic.icon}</div>
       <div class="step-text">
         <div class="step-label${state === "waiting" ? " muted" : ""}">${label}</div>
         ${hint ? `<div class="step-hint">${hint}</div>` : ""}
+        ${actionHtml}
         ${copyText ? `<button class="copy-btn" data-copy="${copyText}">Copy command</button>` : ""}
       </div>`;
     return row;
@@ -613,7 +634,7 @@
       ? "iPhone connected via Wi-Fi ✓"
       : "Connect iPhone via USB (or Wi-Fi)";
     const s1Hint = s1 === "pending"
-      ? "Use a USB data cable, <em>or</em> make sure your iPhone is on the same Wi-Fi network with the tunnel (start-tunnel.sh) already running."
+      ? "Plug in your iPhone with a USB data cable, or join the same Wi-Fi network."
       : null;
     setupBody.appendChild(makeStep(s1, s1Label, s1Hint));
 
@@ -643,13 +664,17 @@
                : ["no_device","locked","untrusted","no_developer_mode"].includes(step) ? "waiting"
                : "done";
       const tunnelHint = step === "no_tunnel"
-        ? `Open <strong>Terminal</strong> and run — leave that window open while you spoof:`
+        ? `macOS will ask for your password — that's how we get permission to talk to your iPhone.`
         : (s4 === "waiting" ? "Complete the steps above first." : null);
+      const tunnelAction = step === "no_tunnel"
+        ? { id: "start-tunnel", label: "Allow access" }
+        : null;
       setupBody.appendChild(makeStep(
         s4,
-        "Start the developer tunnel (iOS 17+)",
+        "Allow Location Spoofer to talk to your iPhone (iOS 17+)",
         tunnelHint,
-        step === "no_tunnel" ? "./backend/start-tunnel.sh" : null
+        null,
+        tunnelAction
       ));
     }
 
@@ -685,6 +710,32 @@
           btn.classList.add("copied");
           setTimeout(() => { btn.textContent = "Copy command"; btn.classList.remove("copied"); }, 2000);
         });
+      });
+    });
+
+    // Wire up action buttons (e.g. Start tunnel)
+    setupBody.querySelectorAll(".action-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.action;
+        if (action !== "start-tunnel") return;
+        const orig = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Waiting for password…";
+        try {
+          // Long timeout — the user may take a while typing their Mac password.
+          const r = await fetch(API_BASE + "/start-tunnel", { method: "POST" });
+          const data = await r.json().catch(() => ({ ok: false, message: "Unexpected server response." }));
+          if (data.ok) {
+            toast(data.message || "Connected — you're ready to spoof.", "good");
+          } else {
+            toast(data.message || "Couldn't start the tunnel.", "bad");
+          }
+        } catch {
+          toast("Couldn't reach the local server.", "bad");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = orig;
+        }
       });
     });
   }

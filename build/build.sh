@@ -77,8 +77,18 @@ echo "==> Running PyInstaller..."
   --specpath "$SPEC_DIR" \
   --osx-bundle-identifier "com.locationspoofer.app" \
   --add-data "$FRONTEND_HTML:frontend" \
+  --hidden-import tunnel_manager \
+  --hidden-import spoofer \
   --collect-submodules pymobiledevice3 \
   --collect-data pymobiledevice3 \
+  --collect-submodules webview \
+  --collect-data webview \
+  --hidden-import webview \
+  --hidden-import webview.platforms.cocoa \
+  --hidden-import objc \
+  --hidden-import Foundation \
+  --hidden-import AppKit \
+  --hidden-import WebKit \
   --hidden-import uvicorn \
   --hidden-import uvicorn.lifespan.on \
   --hidden-import uvicorn.lifespan.off \
@@ -102,28 +112,63 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# ---- Ad-hoc code signing ----------------------------------------------------
+# Without a paid Apple Developer ID we can't notarize, but ad-hoc signing
+# (sign with "-") gives the bundle a stable identity so macOS doesn't
+# permanently quarantine it after the first right-click → Open.
+echo "==> Ad-hoc code signing..."
+codesign --force --deep --sign - "$APP_PATH"
+codesign --verify --verbose=1 "$APP_PATH" || {
+  echo "⚠ Code signature verification failed — the .app may still launch with a warning."
+}
+
 # ---- Create DMG -------------------------------------------------------------
 DMG_PATH="$DIST_DIR/LocationSpoofer.dmg"
+DMG_BACKGROUND="$ASSETS_DIR/dmg-background.png"
 echo "==> Creating DMG..."
 
-# Staging folder for the DMG contents
-DMG_STAGE="$WORK_DIR/dmg-staging"
-rm -rf "$DMG_STAGE"
-mkdir -p "$DMG_STAGE"
+# Prefer create-dmg for the polished installer (custom background, sized
+# window, positioned icons, drop arrow). Fall back to plain hdiutil if it
+# isn't installed — that path still ships a working DMG, just less pretty.
+if command -v create-dmg >/dev/null 2>&1 && [[ -f "$DMG_BACKGROUND" ]]; then
+  echo "    Using create-dmg with background image."
+  rm -f "$DMG_PATH"
+  create-dmg \
+    --volname "Location Spoofer" \
+    --background "$DMG_BACKGROUND" \
+    --window-pos 200 120 \
+    --window-size 600 400 \
+    --icon-size 128 \
+    --icon "LocationSpoofer.app" 150 230 \
+    --hide-extension "LocationSpoofer.app" \
+    --app-drop-link 450 230 \
+    --no-internet-enable \
+    "$DMG_PATH" \
+    "$APP_PATH" || {
+      echo "⚠ create-dmg failed — falling back to plain hdiutil."
+      DMG_FALLBACK=1
+    }
+else
+  echo "    create-dmg not installed — using plain hdiutil."
+  echo "    (brew install create-dmg for a polished installer.)"
+  DMG_FALLBACK=1
+fi
 
-# Copy the .app and add a symlink to /Applications for drag-install UX
-cp -R "$APP_PATH" "$DMG_STAGE/"
-ln -s /Applications "$DMG_STAGE/Applications"
-
-hdiutil create \
-  -volname "LocationSpoofer" \
-  -srcfolder "$DMG_STAGE" \
-  -ov \
-  -format UDZO \
-  -fs HFS+ \
-  "$DMG_PATH"
-
-rm -rf "$DMG_STAGE"
+if [[ "${DMG_FALLBACK:-0}" == "1" ]]; then
+  DMG_STAGE="$WORK_DIR/dmg-staging"
+  rm -rf "$DMG_STAGE"
+  mkdir -p "$DMG_STAGE"
+  cp -R "$APP_PATH" "$DMG_STAGE/"
+  ln -s /Applications "$DMG_STAGE/Applications"
+  hdiutil create \
+    -volname "LocationSpoofer" \
+    -srcfolder "$DMG_STAGE" \
+    -ov \
+    -format UDZO \
+    -fs HFS+ \
+    "$DMG_PATH"
+  rm -rf "$DMG_STAGE"
+fi
 
 echo
 echo "✓ Build complete."
@@ -131,18 +176,20 @@ echo "   App: $APP_PATH"
 echo "   DMG: $DMG_PATH"
 echo
 echo "------------------------------------------------------------------"
-echo "  CODE SIGNING NOTE"
+echo "  GATEKEEPER NOTE (ad-hoc signed, not notarized)"
 echo "------------------------------------------------------------------"
-echo "  This .app is NOT signed by a paid Apple Developer account, so"
-echo "  the first time anyone opens it macOS will say:"
+echo "  This .app is ad-hoc signed but NOT notarized by Apple, so the"
+echo "  first time anyone opens it macOS will say:"
 echo
-echo '      "LocationSpoofer.app cannot be opened because the developer'
-echo '       cannot be verified."'
+echo '      "LocationSpoofer.app cannot be opened because Apple cannot'
+echo '       check it for malicious software."'
 echo
-echo "  To bypass:"
+echo "  To bypass on the first launch:"
 echo "    1. Right-click LocationSpoofer.app → Open"
 echo "    2. Click 'Open' in the dialog that appears"
 echo "  OR"
 echo "    System Settings → Privacy & Security → scroll down →"
 echo "    click 'Open Anyway' next to LocationSpoofer."
+echo
+echo "  After that one-time approval the app launches normally."
 echo "------------------------------------------------------------------"
